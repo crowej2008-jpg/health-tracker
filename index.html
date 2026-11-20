@@ -66,13 +66,31 @@
   .sheet .card{width:100%;margin:0;border-radius:16px 16px 0 0;padding-bottom:calc(env(safe-area-inset-bottom) + 14px)}
   .sheet textarea{height:96px}
   #vOut div{padding:4px 0;font-size:.9rem}
+  #pBtn{padding:6px 12px;font-size:14px;margin-left:10px}
+  #progress{display:none}
+  body.prog #progress{display:block}
+  body.prog > section.card,body.prog .mic,body.prog #date{display:none}
+  .seg{display:flex;gap:6px;margin-bottom:12px}
+  .seg button{flex:1}
+  .seg button.on{background:var(--green);color:#052e16;font-weight:600}
+  .chart svg{width:100%;height:120px;display:block}
 </style>
 </head>
 <body>
 <header>
   <h1>Today</h1>
-  <div id="date"></div>
+  <div><span id="date"></span><button id="pBtn">📈 Progress</button></div>
 </header>
+
+<!-- PROGRESS (charts) -->
+<div id="progress">
+  <div class="seg"><button data-r="7" class="on">7 days</button><button data-r="30">30 days</button></div>
+  <section class="card chart"><h2>🍽️ Calories <small id="cKcal"></small></h2><svg id="gKcal"></svg></section>
+  <section class="card chart"><h2>🚶 Walk minutes <small id="cWalk"></small></h2><svg id="gWalk"></svg></section>
+  <section class="card chart"><h2>🧠 Mood <small id="cMood"></small></h2><svg id="gMood"></svg></section>
+  <section class="card chart"><h2>😴 Sleep hours <small id="cSleep"></small></h2><svg id="gSleep"></svg></section>
+  <div class="note" style="text-align:center">Empty days are skipped in averages.</div>
+</div>
 
 <!-- FOOD -->
 <section class="card" id="food">
@@ -180,7 +198,7 @@
 </section></div>
 
 <script>
-const VERSION='10'; // bump on every release so the home-screen app updates
+const VERSION='11'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -406,6 +424,51 @@ document.getElementById('vClose').addEventListener('click',()=>vS.classList.remo
 document.getElementById('vUndo').addEventListener('click',()=>{if(undoSnap){data=JSON.parse(undoSnap); undoSnap=null; save(); render(); vO.innerHTML='<div>Undone.</div>'; document.getElementById('vUndo').style.display='none';}});
 document.getElementById('vKey').addEventListener('click',e=>{e.preventDefault(); getKey(true)});
 vS.addEventListener('click',e=>{if(e.target===vS)vS.classList.remove('open')});
+
+// ---- progress charts (step 10) ----
+let range=7;
+const sleepMins=k=>{ // bed from the day before + wake on day k
+  const b=getDay(shift(k-1)).bed, w=getDay(shift(k)).wake; if(!b||!w)return null;
+  const[h,m]=w.split(':').map(Number), d=h*60+m+1440-mins(b); return d>0&&d<20*60?d:null;
+};
+function chart(id,vals,{max,goal,fmt=v=>Math.round(v),line}){
+  const W=320,H=120,T=8,B=18,n=vals.length,bw=W/n,top=Math.max(max||0,goal||0,...vals.filter(v=>v!=null))||1;
+  const y=v=>T+(H-T-B)*(1-v/top);
+  let g='';
+  if(goal)g+=`<line x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" stroke="#f59e0b" stroke-dasharray="4 4"/>`;
+  if(line){
+    const pts=vals.map((v,i)=>v==null?null:[i*bw+bw/2,y(v)]);
+    let d='',pen=false; pts.forEach(p=>{if(!p){pen=false;return}d+=(pen?'L':'M')+p[0].toFixed(1)+' '+p[1].toFixed(1);pen=true});
+    g+=`<path d="${d}" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linejoin="round"/>`;
+    pts.forEach(p=>{if(p)g+=`<circle cx="${p[0]}" cy="${p[1]}" r="${n>10?2.5:4}" fill="#22c55e"/>`});
+  }else vals.forEach((v,i)=>{if(v){const h=y(0)-y(v); g+=`<rect x="${i*bw+bw*.15}" y="${y(v)}" width="${bw*.7}" height="${h}" rx="2" fill="${goal&&v>goal&&id==='gKcal'?'#f59e0b':'#22c55e'}"/>`}});
+  g+=`<line x1="0" x2="${W}" y1="${y(0)}" y2="${y(0)}" stroke="#334155"/>`;
+  const step=n>10?7:1; // day labels
+  for(let i=n-1;i>=0;i-=step){const d=now();d.setDate(d.getDate()-(n-1-i));
+    g+=`<text x="${i*bw+bw/2}" y="${H-4}" fill="#94a3b8" font-size="10" text-anchor="middle">${n>10?d.getDate():'SMTWTFS'[d.getDay()]}</text>`;}
+  const el=document.getElementById(id); el.setAttribute('viewBox',`0 0 ${W} ${H}`); el.setAttribute('preserveAspectRatio','none'); el.innerHTML=g;
+  const got=vals.filter(v=>v!=null&&v!==0), avg=got.length?got.reduce((a,b)=>a+b,0)/got.length:null;
+  return avg==null?'no data':'avg '+fmt(avg);
+}
+function renderProgress(){
+  const ks=[];for(let i=range-1;i>=0;i--)ks.push(-i);
+  const days=ks.map(k=>getDay(shift(k)));
+  const kcal=days.map(d=>(d.food||[]).reduce((a,f)=>a+(+f.k||0),0)||null);
+  const walk=days.map(d=>((+d.walk1||0)+(+d.walk2||0))||null);
+  const mood=days.map(d=>d.mood?+d.mood:null);
+  const slp=ks.map(k=>{const m=sleepMins(k);return m==null?null:m/60});
+  document.getElementById('cKcal').textContent=chart('gKcal',kcal,{goal:GOAL,fmt:v=>Math.round(v).toLocaleString()});
+  document.getElementById('cWalk').textContent=chart('gWalk',walk,{goal:WALK_MIN*2,fmt:v=>Math.round(v)+' min'});
+  document.getElementById('cMood').textContent=chart('gMood',mood,{max:5,line:1,fmt:v=>v.toFixed(1)+' / 5'});
+  document.getElementById('cSleep').textContent=chart('gSleep',slp,{goal:8,max:10,line:1,fmt:v=>v.toFixed(1)+' h'});
+}
+document.getElementById('pBtn').addEventListener('click',()=>{
+  const on=document.body.classList.toggle('prog');
+  document.querySelector('h1').textContent=on?'Progress':'Today';
+  document.getElementById('pBtn').textContent=on?'← Today':'📈 Progress';
+  if(on){renderProgress();scrollTo(0,0)}
+});
+$$('.seg button').forEach(b=>b.addEventListener('click',()=>{range=+b.dataset.r;$$('.seg button').forEach(x=>x.classList.toggle('on',x===b));renderProgress()}));
 
 // ---- new day (4am) ----
 function checkDay(){ if(ymd(now())!==day) load(); }
