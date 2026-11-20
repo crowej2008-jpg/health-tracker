@@ -101,6 +101,26 @@
   <div class="note" style="text-align:center">Empty days are skipped in averages.</div>
 </div>
 
+<!-- SUNDAY CHECK-IN (only shown on Sundays) -->
+<section class="card" id="sunday" style="display:none">
+  <h2>📅 Sunday check-in <small>Week of <span id="sWeek"></span></small></h2>
+  <label class="lbl">⚖️ Weight this week <b id="sAvg" style="float:right;color:var(--text)"></b></label>
+  <svg id="gWeight" style="width:100%;height:110px;display:block"></svg>
+  <div class="note" id="sWNote"></div>
+  <label class="lbl">💰 Spending this week</label>
+  <div id="sMoney"></div>
+  <label class="check" style="margin-top:4px"><input data-k="w_rbc" type="checkbox">Checked it against the RBC app</label>
+  <label class="lbl">How was the week overall? (1–5)</label>
+  <div class="scale" data-k="w_rate"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
+  <label class="lbl">Best thing this week</label>
+  <input data-k="w_best" placeholder="Something that went well">
+  <label class="lbl">What was hard?</label>
+  <input data-k="w_hard" placeholder="What got in the way">
+  <label class="lbl">One thing to do better next week</label>
+  <input data-k="w_next" placeholder="Keep it small">
+  <div class="note" id="sLast"></div>
+</section>
+
 <!-- FOOD -->
 <section class="card" id="food">
   <h2>🍽️ Food <small><b id="kcal">0</b> / 2,300 kcal</small></h2>
@@ -207,7 +227,7 @@
 </section></div>
 
 <script>
-const VERSION='12'; // bump on every release so the home-screen app updates
+const VERSION='13'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -326,7 +346,7 @@ function renderWeight(){
     note.textContent=data.weight?'✓ Logged today. You\'ll see the numbers on Sunday.':'After the bathroom, before eating.';
   }
 }
-function saveWeight(){const v=+document.getElementById('wIn').value; if(!(v>50&&v<600))return; data.weight=String(v); save(); renderWeight();}
+function saveWeight(){const v=+document.getElementById('wIn').value; if(!(v>50&&v<600))return; data.weight=String(v); save(); renderWeight(); renderSunday();}
 document.getElementById('wSave').addEventListener('click',saveWeight);
 document.getElementById('wIn').addEventListener('keydown',e=>{if(e.key==='Enter')saveWeight()});
 
@@ -355,6 +375,7 @@ function renderMoney(){
   let n=0; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i); if(k.startsWith('day:')&&k!=='day:'+day&&getDay(k.slice(4)).saved)n++;}
   if(data.saved)n++;
   document.getElementById('savedTotal').textContent='Saved: '+fmt(n*SAVE_AMT);
+  renderSunday();
 }
 function addMoney(){
   const n=document.getElementById('mName'), a=document.getElementById('mAmt'), c=document.getElementById('mCur'), t=document.getElementById('mType');
@@ -440,9 +461,9 @@ const sleepMins=k=>{ // bed from the day before + wake on day k
   const b=getDay(shift(k-1)).bed, w=getDay(shift(k)).wake; if(!b||!w)return null;
   const[h,m]=w.split(':').map(Number), d=h*60+m+1440-mins(b); return d>0&&d<20*60?d:null;
 };
-function chart(id,vals,{max,goal,fmt=v=>Math.round(v),line}){
+function chart(id,vals,{max,min=0,goal,fmt=v=>Math.round(v),line}){
   const W=320,H=120,T=8,B=18,n=vals.length,bw=W/n,top=Math.max(max||0,goal||0,...vals.filter(v=>v!=null))||1;
-  const y=v=>T+(H-T-B)*(1-v/top);
+  const y=v=>T+(H-T-B)*(1-(v-min)/((top-min)||1));
   let g='';
   if(goal)g+=`<line x1="0" x2="${W}" y1="${y(goal)}" y2="${y(goal)}" stroke="#f59e0b" stroke-dasharray="4 4"/>`;
   if(line){
@@ -516,6 +537,29 @@ document.getElementById('pBtn').addEventListener('click',()=>{
   if(on){renderProgress();scrollTo(0,0)}
 });
 $$('.seg button').forEach(b=>b.addEventListener('click',()=>{range=+b.dataset.r;$$('.seg button').forEach(x=>x.classList.toggle('on',x===b));renderProgress()}));
+
+// ---- Sunday check-in (step 12): weight chart + avg, week's spending, weekly questions ----
+const wAvg=from=>{const v=[];for(let i=from;i>from-7;i--){const w=+(i?getDay(shift(i)):data).weight;if(w>0)v.push(w)}return v.length?v.reduce((a,b)=>a+b,0)/v.length:null};
+function renderSunday(){
+  const sun=now().getDay()===0, el=document.getElementById('sunday'); el.style.display=sun?'':'none'; if(!sun)return;
+  const mon=now(); mon.setDate(mon.getDate()-6);
+  document.getElementById('sWeek').textContent=mon.toLocaleDateString('en-CA',{month:'short',day:'numeric'});
+  const wt=[-6,-5,-4,-3,-2,-1,0].map(i=>{const w=+(i?getDay(shift(i)):data).weight;return w>0?w:null}), got=wt.filter(v=>v);
+  const lo=got.length?Math.floor(Math.min(...got)-2):0, hi=got.length?Math.ceil(Math.max(...got)+2):1;
+  chart('gWeight',wt,{line:1,min:lo,max:hi}); document.getElementById('gWeight').querySelectorAll('circle').forEach(c=>c.setAttribute('r',4));
+  const a=wAvg(0), b=wAvg(-7);
+  document.getElementById('sAvg').textContent=a?'avg '+a.toFixed(1)+' lb':'';
+  document.getElementById('sWNote').textContent=!a?'No weigh-ins this week.':got.length+' of 7 days logged'+(b?' · '+(a-b>0?'+':'')+(a-b).toFixed(1)+' lb vs last week':'');
+  const wk=weekDays(), m=wk.flatMap(d=>d.money||[]);
+  const wants=m.filter(x=>x.type!=='Need').reduce((s,x)=>s+cad(x),0), needs=m.filter(x=>x.type==='Need').reduce((s,x)=>s+cad(x),0);
+  const games=m.filter(x=>x.type==='Game').reduce((s,x)=>s+usd(x),0), ff=wk.flatMap(d=>d.food||[]).filter(x=>x.ff).length, sv=wk.filter(d=>d.saved).length;
+  const row=(n,v,over)=>`<div class="stk"><span>${n}</span><b class="${over?'hot':''}">${v}</b></div>`;
+  document.getElementById('sMoney').innerHTML=
+    row('Wants',fmt(wants)+' / $'+WANTS_MAX,wants>WANTS_MAX)+row('🎮 Games',fmt(games)+' / $'+GAMES_WEEK+' USD',games>GAMES_WEEK)+
+    row('🛒 Needs',fmt(needs),0)+row('🍔 Fast food',ff+' / 1',ff>1)+row('🏦 Savings transfer',sv?'✓ went through':'not ticked',!sv)+
+    `<div class="note">${wants<=WANTS_MAX?'Under the wants limit 👍 ('+fmt(WANTS_MAX-wants)+' left)':'Over the wants limit by '+fmt(wants-WANTS_MAX)}</div>`;
+  const last=getDay(shift(-7)).w_next; document.getElementById('sLast').textContent=last?'Last week you said: "'+last+'"':'';
+}
 
 // ---- new day (4am) ----
 function checkDay(){ if(ymd(now())!==day) load(); }
