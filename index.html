@@ -44,6 +44,8 @@
   .check input{width:22px;height:22px;flex:0 0 auto;accent-color:var(--green)}
   .check span{color:var(--dim);font-size:.8rem;margin-left:auto}
   .note{color:var(--dim);font-size:.8rem;margin-top:8px}
+    .scale button.on,.tags button.on{background:var(--green);color:#052e16;font-weight:600}
+  #ver{color:var(--line);font-size:.7rem;text-align:center;margin-top:16px}
   .mic{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 16px);width:64px;height:64px;border-radius:50%;background:var(--green);font-size:28px;padding:0;box-shadow:0 4px 16px rgba(0,0,0,.5)}
 </style>
 </head>
@@ -70,8 +72,8 @@
 <!-- WALKS -->
 <section class="card" id="walks">
   <h2>🚶 Walks <small>0 / 2 done</small></h2>
-  <div class="walk"><div>Walk 1 <div class="note">Afternoon · by 5:00 pm</div></div><input type="number" inputmode="numeric" placeholder="min"></div>
-  <div class="walk"><div>Walk 2 <div class="note">Evening · by 9:00 pm</div></div><input type="number" inputmode="numeric" placeholder="min"></div>
+  <div class="walk"><div>Walk 1 <div class="note">Afternoon · by 5:00 pm</div></div><input data-k="walk1" type="number" inputmode="numeric" placeholder="min"></div>
+  <div class="walk"><div>Walk 2 <div class="note">Evening · by 9:00 pm</div></div><input data-k="walk2" type="number" inputmode="numeric" placeholder="min"></div>
   <div class="note">Goal 60 min each · counts at 45+</div>
 </section>
 
@@ -79,35 +81,35 @@
 <section class="card" id="sleep">
   <h2>😴 Sleep <small>Bed by 11:00</small></h2>
   <div class="row">
-    <div><label class="lbl">Bedtime</label><input type="time"></div>
-    <div><label class="lbl">Woke up</label><input type="time"></div>
+    <div><label class="lbl">Bedtime</label><input data-k="bed" type="time"></div>
+    <div><label class="lbl">Woke up</label><input data-k="wake" type="time"></div>
   </div>
   <label class="lbl">How rested? (1–5)</label>
-  <div class="scale"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
+  <div class="scale" data-k="rested"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
 </section>
 
 <!-- MOOD -->
 <section class="card" id="mood">
   <h2>🧠 Mood</h2>
   <label class="lbl">Mood</label>
-  <div class="scale"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
+  <div class="scale" data-k="mood"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
   <label class="lbl">Stress</label>
-  <div class="scale"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
+  <div class="scale" data-k="stress"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
   <label class="lbl">Energy</label>
-  <div class="scale"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
+  <div class="scale" data-k="energy"><button>1</button><button>2</button><button>3</button><button>4</button><button>5</button></div>
   <label class="lbl">Why?</label>
-  <div class="tags"><button>School</button><button>Family</button><button>Friends</button><button>Bored</button><button>Tired</button><button>Money</button><button>Health</button><button>Other</button></div>
+  <div class="tags" data-k="why"><button>School</button><button>Family</button><button>Friends</button><button>Bored</button><button>Tired</button><button>Money</button><button>Health</button><button>Other</button></div>
   <label class="lbl">One-line journal</label>
-  <textarea placeholder="How's today going?"></textarea>
+  <textarea data-k="journal" placeholder="How's today going?"></textarea>
   <label class="lbl">Daily win</label>
-  <input placeholder="One thing that went well">
+  <input data-k="win" placeholder="One thing that went well">
 </section>
 
 <!-- WEIGHT -->
 <section class="card" id="weight">
   <h2>⚖️ Weight <small>Hidden until Sunday</small></h2>
   <div class="row">
-    <input type="number" inputmode="decimal" placeholder="Morning weight (lb)">
+    <input data-k="weight" type="number" inputmode="decimal" placeholder="Morning weight (lb)">
     <button class="add">Save</button>
   </div>
   <div class="note">After the bathroom, before eating.</div>
@@ -116,13 +118,13 @@
 <!-- HABITS -->
 <section class="card" id="habits">
   <h2>✅ Habits <small>0 / 7</small></h2>
-  <label class="check"><input type="checkbox">Went to school<span>Weekdays</span></label>
-  <label class="check"><input type="checkbox">In bed by 11<span>Tonight</span></label>
-  <label class="check"><input type="checkbox">Water: 8 glasses<span>0 / 8</span></label>
-  <label class="check"><input type="checkbox">Shower<span>Morning</span></label>
-  <label class="check"><input type="checkbox">Brush teeth (morning)</label>
-  <label class="check"><input type="checkbox">Brush teeth (night)</label>
-  <label class="check"><input type="checkbox">Laundry<span>Saturdays</span></label>
+  <label class="check"><input data-k="h_school" type="checkbox">Went to school<span>Weekdays</span></label>
+  <label class="check"><input data-k="h_bed" type="checkbox">In bed by 11<span>Tonight</span></label>
+  <label class="check"><input data-k="h_water" type="checkbox">Water: 8 glasses<span>0 / 8</span></label>
+  <label class="check"><input data-k="h_shower" type="checkbox">Shower<span>Morning</span></label>
+  <label class="check"><input data-k="h_teeth_am" type="checkbox">Brush teeth (morning)</label>
+  <label class="check"><input data-k="h_teeth_pm" type="checkbox">Brush teeth (night)</label>
+  <label class="check"><input data-k="h_laundry" type="checkbox">Laundry<span>Saturdays</span></label>
 </section>
 
 <!-- MONEY -->
@@ -138,14 +140,72 @@
     <select><option>Want</option><option>Need</option></select>
   </div>
   <div class="row"><button class="add">Add purchase</button></div>
-  <label class="check" style="margin-top:8px"><input type="checkbox">Savings transfer went through<span>Saved: $0</span></label>
+  <label class="check" style="margin-top:8px"><input data-k="saved" type="checkbox">Savings transfer went through<span>Saved: $0</span></label>
 </section>
+
+<div id="ver"></div>
 
 <button class="mic" aria-label="Voice log">🎤</button>
 
 <script>
-  document.getElementById('date').textContent =
-    new Date().toLocaleDateString('en-CA', {weekday:'long', month:'short', day:'numeric'});
+const VERSION='3'; // bump on every release so the home-screen app updates
+const $$=s=>document.querySelectorAll(s);
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+let day, data={};
+
+// ---- saving (localStorage, one entry per day: "day:YYYY-MM-DD") ----
+function load(){
+  day=ymd(new Date());
+  try{data=JSON.parse(localStorage.getItem('day:'+day))||{}}catch(e){data={}}
+  document.getElementById('date').textContent=new Date().toLocaleDateString('en-CA',{weekday:'long',month:'short',day:'numeric'});
+  render();
+}
+function save(){try{localStorage.setItem('day:'+day,JSON.stringify(data))}catch(e){}}
+function render(){
+  $$('[data-k]').forEach(el=>{
+    const v=data[el.dataset.k];
+    if(el.classList.contains('scale')) el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',b.textContent===v));
+    else if(el.classList.contains('tags')) el.querySelectorAll('button').forEach(b=>b.classList.toggle('on',(v||[]).includes(b.textContent)));
+    else if(el.type==='checkbox') el.checked=!!v;
+    else el.value=v??'';
+  });
+}
+function onEdit(e){
+  const el=e.target;
+  if(!el.dataset||!el.dataset.k)return;
+  data[el.dataset.k]=el.type==='checkbox'?el.checked:el.value;
+  save();
+}
+document.addEventListener('input',onEdit);
+document.addEventListener('change',onEdit);
+document.addEventListener('click',e=>{
+  const b=e.target.closest('.scale button,.tags button'); if(!b)return;
+  const g=b.parentElement,k=g.dataset.k; if(!k)return;
+  const t=b.textContent;
+  if(g.classList.contains('scale')) data[k]=data[k]===t?null:t;   // tap again to clear
+  else{const a=data[k]||[],i=a.indexOf(t); i<0?a.push(t):a.splice(i,1); data[k]=a;}
+  save(); render();
+});
+
+// ---- new day at midnight ----
+function checkDay(){ if(ymd(new Date())!==day) load(); }
+setInterval(checkDay,30000);
+
+// ---- auto-update: reload if a newer version is online ----
+async function checkUpdate(){
+  try{
+    const r=await fetch(location.pathname+'?t='+Date.now(),{cache:'no-store'});
+    const m=(await r.text()).match(/VERSION\s*=\s*'(\d+)'/);
+    if(m&&m[1]!==VERSION){
+      const n=+sessionStorage.getItem('upd')||0;
+      if(n<2){sessionStorage.setItem('upd',n+1); location.replace(location.pathname+'?v='+m[1]);}
+    } else sessionStorage.removeItem('upd');
+  }catch(e){}
+}
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){checkDay(); checkUpdate();} });
+
+document.getElementById('ver').textContent='v'+VERSION;
+load(); checkUpdate();
 </script>
 </body>
 </html>
