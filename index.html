@@ -45,6 +45,13 @@
   .check span{color:var(--dim);font-size:.8rem;margin-left:auto}
   .note{color:var(--dim);font-size:.8rem;margin-top:8px}
     .scale button.on,.tags button.on{background:var(--green);color:#052e16;font-weight:600}
+  .food{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+  .food:first-child{border-top:0}
+  .food .n{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .food .m{color:var(--dim);font-size:.85rem;white-space:nowrap}
+  .food .x{background:none;color:var(--dim);padding:4px 8px;font-size:18px;line-height:1}
+  .bar i.over{background:var(--amber)}
+  b.over{color:var(--amber)}
   #ver{color:var(--line);font-size:.7rem;text-align:center;margin-top:16px}
   .mic{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 16px);width:64px;height:64px;border-radius:50%;background:var(--green);font-size:28px;padding:0;box-shadow:0 4px 16px rgba(0,0,0,.5)}
 </style>
@@ -60,13 +67,15 @@
   <h2>🍽️ Food <small><b id="kcal">0</b> / 2,300 kcal</small></h2>
   <div class="bar"><i id="kcalBar"></i></div>
   <div class="note">Protein: <b id="protein">0</b> g · Fast food this week: <b id="fastfood">0</b> / 1</div>
-  <div class="empty">Nothing logged yet.</div>
-  <input placeholder="What did you eat?">
+  <div id="foodList"></div>
+  <div class="empty" id="foodEmpty">Nothing logged yet.</div>
+  <input id="fName" placeholder="What did you eat?" enterkeyhint="next">
   <div class="row">
-    <input type="number" inputmode="numeric" placeholder="kcal">
-    <input type="number" inputmode="numeric" placeholder="protein g">
-    <button class="add">Add</button>
+    <input id="fKcal" type="number" inputmode="numeric" placeholder="kcal">
+    <input id="fProt" type="number" inputmode="numeric" placeholder="protein g">
+    <button class="add" id="fAdd">Add</button>
   </div>
+  <label class="check" style="margin-top:4px"><input id="fFast" type="checkbox">Fast food<span>Counts toward 1 / week</span></label>
 </section>
 
 <!-- WALKS -->
@@ -148,7 +157,7 @@
 <button class="mic" aria-label="Voice log">🎤</button>
 
 <script>
-const VERSION='3'; // bump on every release so the home-screen app updates
+const VERSION='4'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 let day, data={};
@@ -169,7 +178,46 @@ function render(){
     else if(el.type==='checkbox') el.checked=!!v;
     else el.value=v??'';
   });
+  renderFood();
 }
+
+// ---- food list (data.food = [{n,k,p,ff}]) ----
+const GOAL=2300, esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function fastThisWeek(){ // Monday–Sunday
+  const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7));
+  let n=0;
+  for(let i=0;i<7;i++){
+    const key=ymd(d); let f;
+    if(key===day) f=data.food; else try{f=(JSON.parse(localStorage.getItem('day:'+key))||{}).food}catch(e){}
+    (f||[]).forEach(x=>{if(x.ff)n++}); d.setDate(d.getDate()+1);
+  }
+  return n;
+}
+function renderFood(){
+  const f=data.food||[];
+  const k=f.reduce((s,x)=>s+(+x.k||0),0), p=f.reduce((s,x)=>s+(+x.p||0),0), ff=fastThisWeek();
+  document.getElementById('foodList').innerHTML=f.map((x,i)=>
+    `<div class="food"><span class="n">${x.ff?'🍔 ':''}${esc(x.n)}</span><span class="m">${x.k||0} kcal · ${x.p||0} g</span><button class="x" data-del="${i}" aria-label="Remove">×</button></div>`).join('');
+  document.getElementById('foodEmpty').style.display=f.length?'none':'';
+  const kc=document.getElementById('kcal'); kc.textContent=k.toLocaleString(); kc.classList.toggle('over',k>GOAL);
+  const bar=document.getElementById('kcalBar'); bar.style.width=Math.min(100,k/GOAL*100)+'%'; bar.classList.toggle('over',k>GOAL);
+  document.getElementById('protein').textContent=p;
+  const fe=document.getElementById('fastfood'); fe.textContent=ff; fe.classList.toggle('over',ff>1);
+}
+function addFood(){
+  const n=document.getElementById('fName'), k=document.getElementById('fKcal'), p=document.getElementById('fProt'), ff=document.getElementById('fFast');
+  if(!n.value.trim()&&!k.value)return;
+  (data.food=data.food||[]).push({n:n.value.trim()||'Food',k:Math.round(+k.value||0),p:Math.round(+p.value||0),ff:ff.checked});
+  n.value=k.value=p.value=''; ff.checked=false;
+  save(); renderFood();
+}
+document.getElementById('fAdd').addEventListener('click',addFood);
+document.getElementById('fProt').addEventListener('keydown',e=>{if(e.key==='Enter')addFood()});
+document.getElementById('foodList').addEventListener('click',e=>{
+  const b=e.target.closest('[data-del]'); if(!b)return;
+  const i=+b.dataset.del, x=data.food[i];
+  if(confirm('Remove "'+x.n+'"?')){data.food.splice(i,1); save(); renderFood();}
+});
 function onEdit(e){
   const el=e.target;
   if(!el.dataset||!el.dataset.k)return;
