@@ -95,9 +95,9 @@
 
 <!-- SLEEP -->
 <section class="card" id="sleep">
-  <h2>😴 Sleep <small>Bed by 11:00</small></h2>
+  <h2>😴 Sleep <small>Last night: <b id="slept">–</b></small></h2>
   <div class="row">
-    <div><label class="lbl">Bedtime</label><input data-k="bed" type="time"></div>
+    <div><label class="lbl">Bedtime (tonight)</label><input data-k="bed" type="time"></div>
     <div><label class="lbl">Woke up</label><input data-k="wake" type="time"></div>
   </div>
   <label class="lbl">How rested? (1–5)</label>
@@ -123,12 +123,12 @@
 
 <!-- WEIGHT -->
 <section class="card" id="weight">
-  <h2>⚖️ Weight <small>Hidden until Sunday</small></h2>
+  <h2>⚖️ Weight <small id="wHint">Hidden until Sunday</small></h2>
   <div class="row">
-    <input data-k="weight" type="number" inputmode="decimal" placeholder="Morning weight (lb)">
-    <button class="add">Save</button>
+    <input id="wIn" type="number" inputmode="decimal" placeholder="Morning weight (lb)">
+    <button class="add" id="wSave">Save</button>
   </div>
-  <div class="note">After the bathroom, before eating.</div>
+  <div class="note" id="wNote">After the bathroom, before eating.</div>
 </section>
 
 <!-- HABITS -->
@@ -164,16 +164,20 @@
 <button class="mic" aria-label="Voice log">🎤</button>
 
 <script>
-const VERSION='5'; // bump on every release so the home-screen app updates
+const VERSION='6'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
+const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 let day, data={};
+const now=()=>new Date(Date.now()-DAY_START*36e5); // shifted clock
+const getDay=k=>{try{return JSON.parse(localStorage.getItem('day:'+k))||{}}catch(e){return{}}};
+const shift=(n)=>{const d=now();d.setDate(d.getDate()+n);return ymd(d)};
 
 // ---- saving (localStorage, one entry per day: "day:YYYY-MM-DD") ----
 function load(){
-  day=ymd(new Date());
+  day=ymd(now());
   try{data=JSON.parse(localStorage.getItem('day:'+day))||{}}catch(e){data={}}
-  document.getElementById('date').textContent=new Date().toLocaleDateString('en-CA',{weekday:'long',month:'short',day:'numeric'});
+  document.getElementById('date').textContent=now().toLocaleDateString('en-CA',{weekday:'long',month:'short',day:'numeric'});
   render();
 }
 function save(){try{localStorage.setItem('day:'+day,JSON.stringify(data))}catch(e){}}
@@ -185,7 +189,7 @@ function render(){
     else if(el.type==='checkbox') el.checked=!!v;
     else el.value=v??'';
   });
-  renderFood(); renderCounts();
+  renderFood(); renderCounts(); renderSleep(); renderWeight();
 }
 
 // ---- walks (45+ min counts) + habits (water counter 0–8 counts at 8) ----
@@ -205,7 +209,7 @@ document.querySelector('.check.water').addEventListener('click',e=>{
 // ---- food list (data.food = [{n,k,p,ff}]) ----
 const GOAL=2300, esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function fastThisWeek(){ // Monday–Sunday
-  const d=new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7));
+  const d=now(); d.setHours(0,0,0,0); d.setDate(d.getDate()-((d.getDay()+6)%7));
   let n=0;
   for(let i=0;i<7;i++){
     const key=ymd(d); let f;
@@ -243,7 +247,8 @@ function onEdit(e){
   const el=e.target;
   if(!el.dataset||!el.dataset.k)return;
   data[el.dataset.k]=el.type==='checkbox'?el.checked:el.value;
-  save(); renderCounts();
+  if(el.dataset.k==='bed'&&el.value){data.h_bed=mins(el.value)<=23*60; render();} // auto-tick "in bed by 11"
+  save(); renderCounts(); renderSleep();
 }
 document.addEventListener('input',onEdit);
 document.addEventListener('change',onEdit);
@@ -256,8 +261,34 @@ document.addEventListener('click',e=>{
   save(); render();
 });
 
-// ---- new day at midnight ----
-function checkDay(){ if(ymd(new Date())!==day) load(); }
+// ---- sleep: yesterday's bedtime → today's wake (times before 4am = after midnight) ----
+const mins=t=>{const[h,m]=t.split(':').map(Number);const x=h*60+m;return x<DAY_START*60?x+1440:x};
+function renderSleep(){
+  const b=getDay(shift(-1)).bed, w=data.wake, el=document.getElementById('slept');
+  let d=0;
+  if(b&&w){const[h,m]=w.split(':').map(Number); d=h*60+m+1440-mins(b); if(d<=0||d>=20*60)d=0;}
+  el.textContent=d?Math.floor(d/60)+'h '+String(d%60).padStart(2,'0')+'m':'–'; el.classList.toggle('done',d>=8*60);
+}
+
+// ---- weight: saved daily, numbers only shown on Sunday ----
+function renderWeight(){
+  const sun=now().getDay()===0, inp=document.getElementById('wIn'), note=document.getElementById('wNote');
+  document.getElementById('wHint').textContent=sun?'Sunday check-in':'Hidden until Sunday';
+  if(sun){
+    inp.value=data.weight??'';
+    const v=[0,1,2,3,4,5,6].map(i=>i?+getDay(shift(-i)).weight:+data.weight).filter(x=>x>0);
+    note.textContent=v.length?'This week avg: '+(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1)+' lb ('+v.length+' days)':'After the bathroom, before eating.';
+  } else {
+    inp.value=''; inp.placeholder=data.weight?'Logged ✓ (type to change)':'Morning weight (lb)';
+    note.textContent=data.weight?'✓ Logged today. You\'ll see the numbers on Sunday.':'After the bathroom, before eating.';
+  }
+}
+function saveWeight(){const v=+document.getElementById('wIn').value; if(!(v>50&&v<600))return; data.weight=String(v); save(); renderWeight();}
+document.getElementById('wSave').addEventListener('click',saveWeight);
+document.getElementById('wIn').addEventListener('keydown',e=>{if(e.key==='Enter')saveWeight()});
+
+// ---- new day (4am) ----
+function checkDay(){ if(ymd(now())!==day) load(); }
 setInterval(checkDay,30000);
 
 // ---- auto-update: reload if a newer version is online ----
