@@ -52,6 +52,13 @@
   .food .x{background:none;color:var(--dim);padding:4px 8px;font-size:18px;line-height:1}
   .bar i.over{background:var(--amber)}
   b.over{color:var(--amber)}
+  .card h2 small b.done,.walk input.done{color:var(--green)}
+  .walk input.done{border-color:var(--green)}
+  .check.water i{width:22px;text-align:center;font-style:normal;flex:0 0 auto}
+  .check .ctr{display:flex;align-items:center;gap:8px;color:var(--dim);font-size:.9rem}
+  .check .ctr b{color:var(--text);min-width:1ch;text-align:center}
+  .check .ctr b.done{color:var(--green)}
+  .check .ctr button{width:36px;height:36px;padding:0;font-size:20px;line-height:1}
   #ver{color:var(--line);font-size:.7rem;text-align:center;margin-top:16px}
   .mic{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 16px);width:64px;height:64px;border-radius:50%;background:var(--green);font-size:28px;padding:0;box-shadow:0 4px 16px rgba(0,0,0,.5)}
 </style>
@@ -80,7 +87,7 @@
 
 <!-- WALKS -->
 <section class="card" id="walks">
-  <h2>🚶 Walks <small>0 / 2 done</small></h2>
+  <h2>🚶 Walks <small><b id="walkDone">0</b> / 2 done</small></h2>
   <div class="walk"><div>Walk 1 <div class="note">Afternoon · by 5:00 pm</div></div><input data-k="walk1" type="number" inputmode="numeric" placeholder="min"></div>
   <div class="walk"><div>Walk 2 <div class="note">Evening · by 9:00 pm</div></div><input data-k="walk2" type="number" inputmode="numeric" placeholder="min"></div>
   <div class="note">Goal 60 min each · counts at 45+</div>
@@ -126,10 +133,10 @@
 
 <!-- HABITS -->
 <section class="card" id="habits">
-  <h2>✅ Habits <small>0 / 7</small></h2>
+  <h2>✅ Habits <small><b id="habDone">0</b> / 7</small></h2>
   <label class="check"><input data-k="h_school" type="checkbox">Went to school<span>Weekdays</span></label>
   <label class="check"><input data-k="h_bed" type="checkbox">In bed by 11<span>Tonight</span></label>
-  <label class="check"><input data-k="h_water" type="checkbox">Water: 8 glasses<span>0 / 8</span></label>
+  <label class="check water"><i id="wIcon">💧</i>Water<span class="ctr"><button type="button" data-w="-1" aria-label="Less water">−</button><b id="water">0</b> / 8<button type="button" data-w="1" aria-label="More water">+</button></span></label>
   <label class="check"><input data-k="h_shower" type="checkbox">Shower<span>Morning</span></label>
   <label class="check"><input data-k="h_teeth_am" type="checkbox">Brush teeth (morning)</label>
   <label class="check"><input data-k="h_teeth_pm" type="checkbox">Brush teeth (night)</label>
@@ -157,7 +164,7 @@
 <button class="mic" aria-label="Voice log">🎤</button>
 
 <script>
-const VERSION='4'; // bump on every release so the home-screen app updates
+const VERSION='5'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
 let day, data={};
@@ -178,8 +185,22 @@ function render(){
     else if(el.type==='checkbox') el.checked=!!v;
     else el.value=v??'';
   });
-  renderFood();
+  renderFood(); renderCounts();
 }
+
+// ---- walks (45+ min counts) + habits (water counter 0–8 counts at 8) ----
+const WALK_MIN=45, WATER_GOAL=8, HABITS=['h_school','h_bed','h_water','h_shower','h_teeth_am','h_teeth_pm','h_laundry'];
+function renderCounts(){
+  let w=0; ['walk1','walk2'].forEach(k=>{const ok=+data[k]>=WALK_MIN; if(ok)w++; document.querySelector('[data-k="'+k+'"]').classList.toggle('done',ok);});
+  const wd=document.getElementById('walkDone'); wd.textContent=w; wd.classList.toggle('done',w>=2);
+  const wa=+data.water||0, we=document.getElementById('water'); we.textContent=wa; we.classList.toggle('done',wa>=WATER_GOAL);
+  const h=HABITS.filter(k=>data[k]).length, hd=document.getElementById('habDone'); hd.textContent=h; hd.classList.toggle('done',h>=HABITS.length);
+}
+document.querySelector('.check.water').addEventListener('click',e=>{
+  e.preventDefault(); const b=e.target.closest('[data-w]'); if(!b)return;
+  data.water=Math.max(0,Math.min(20,(+data.water||0)+(+b.dataset.w)));
+  data.h_water=data.water>=WATER_GOAL; save(); renderCounts();
+});
 
 // ---- food list (data.food = [{n,k,p,ff}]) ----
 const GOAL=2300, esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -222,7 +243,7 @@ function onEdit(e){
   const el=e.target;
   if(!el.dataset||!el.dataset.k)return;
   data[el.dataset.k]=el.type==='checkbox'?el.checked:el.value;
-  save();
+  save(); renderCounts();
 }
 document.addEventListener('input',onEdit);
 document.addEventListener('change',onEdit);
