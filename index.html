@@ -145,18 +145,20 @@
 
 <!-- MONEY -->
 <section class="card" id="money">
-  <h2>💰 Money <small>Wants: <b>$0</b> / $63 this week</small></h2>
-  <div class="bar"><i></i></div>
-  <div class="note">Games: $0 / $30 USD this week · $10 USD/day max</div>
-  <div class="empty">No purchases today.</div>
-  <input placeholder="What did you buy?">
+  <h2>💰 Money <small>Wants: <b id="wants">$0</b> / $63 this week</small></h2>
+  <div class="bar"><i id="wantsBar"></i></div>
+  <div class="note">Games: <b id="gWeek">$0</b> / $30 USD this week · <b id="gDay">$0</b> / $10 USD today</div>
+  <div id="moneyList" style="margin-top:6px"></div>
+  <div class="empty" id="moneyEmpty">No purchases today.</div>
+  <input id="mName" placeholder="What did you buy?">
   <div class="row">
-    <input type="number" inputmode="decimal" placeholder="$ amount">
-    <select><option>CAD</option><option>USD</option></select>
-    <select><option>Want</option><option>Need</option></select>
+    <input id="mAmt" type="number" inputmode="decimal" placeholder="$ amount">
+    <select id="mCur"><option>CAD</option><option>USD</option></select>
+    <select id="mType"><option>Want</option><option>Game</option><option>Need</option></select>
   </div>
-  <div class="row"><button class="add">Add purchase</button></div>
-  <label class="check" style="margin-top:8px"><input data-k="saved" type="checkbox">Savings transfer went through<span>Saved: $0</span></label>
+  <div class="row"><button class="add" id="mAdd">Add purchase</button></div>
+  <div class="note">Needs (groceries, school, transit) don't count. Games count as wants. USD × <span id="rate"></span> = CAD.</div>
+  <label class="check" style="margin-top:8px"><input data-k="saved" type="checkbox">Savings transfer went through<span id="savedTotal">Saved: $0</span></label>
 </section>
 
 <div id="ver"></div>
@@ -164,7 +166,7 @@
 <button class="mic" aria-label="Voice log">🎤</button>
 
 <script>
-const VERSION='6'; // bump on every release so the home-screen app updates
+const VERSION='7'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -189,7 +191,7 @@ function render(){
     else if(el.type==='checkbox') el.checked=!!v;
     else el.value=v??'';
   });
-  renderFood(); renderCounts(); renderSleep(); renderWeight();
+  renderFood(); renderCounts(); renderSleep(); renderWeight(); renderMoney();
 }
 
 // ---- walks (45+ min counts) + habits (water counter 0–8 counts at 8) ----
@@ -248,7 +250,7 @@ function onEdit(e){
   if(!el.dataset||!el.dataset.k)return;
   data[el.dataset.k]=el.type==='checkbox'?el.checked:el.value;
   if(el.dataset.k==='bed'&&el.value){data.h_bed=mins(el.value)<=23*60; render();} // auto-tick "in bed by 11"
-  save(); renderCounts(); renderSleep();
+  save(); renderCounts(); renderSleep(); if(el.dataset.k==='saved')renderMoney();
 }
 document.addEventListener('input',onEdit);
 document.addEventListener('change',onEdit);
@@ -286,6 +288,47 @@ function renderWeight(){
 function saveWeight(){const v=+document.getElementById('wIn').value; if(!(v>50&&v<600))return; data.weight=String(v); save(); renderWeight();}
 document.getElementById('wSave').addEventListener('click',saveWeight);
 document.getElementById('wIn').addEventListener('keydown',e=>{if(e.key==='Enter')saveWeight()});
+
+// ---- money (data.money = [{n,amt,cur,type}], amt as typed; CAD totals) ----
+const USD_CAD=1.43, WANTS_MAX=63, GAMES_WEEK=30, GAMES_DAY=10, SAVE_AMT=120; // rate includes card fees
+const cad=x=>(+x.amt||0)*(x.cur==='USD'?USD_CAD:1), usd=x=>x.cur==='USD'?(+x.amt||0):(+x.amt||0)/USD_CAD;
+const fmt=n=>'$'+(Math.round(n*100)/100).toFixed(n%1?2:0);
+function weekDays(){ // Monday → today
+  const d=now(), back=(d.getDay()+6)%7, out=[];
+  for(let i=back;i>=1;i--) out.push(getDay(shift(-i)));
+  out.push(data); return out;
+}
+function renderMoney(){
+  const m=data.money||[];
+  document.getElementById('moneyList').innerHTML=m.map((x,i)=>
+    `<div class="food"><span class="n">${x.type==='Game'?'🎮 ':x.type==='Need'?'🛒 ':''}${esc(x.n)}</span><span class="m">${x.type} · ${fmt(+x.amt||0)}${x.cur==='USD'?' USD':''}</span><button class="x" data-mdel="${i}" aria-label="Remove">×</button></div>`).join('');
+  document.getElementById('moneyEmpty').style.display=m.length?'none':'';
+  const wk=weekDays().flatMap(d=>d.money||[]);
+  const wants=wk.filter(x=>x.type!=='Need').reduce((s,x)=>s+cad(x),0);
+  const gw=wk.filter(x=>x.type==='Game').reduce((s,x)=>s+usd(x),0), gd=m.filter(x=>x.type==='Game').reduce((s,x)=>s+usd(x),0);
+  const we=document.getElementById('wants'); we.textContent=fmt(wants); we.classList.toggle('over',wants>WANTS_MAX);
+  const bar=document.getElementById('wantsBar'); bar.style.width=Math.min(100,wants/WANTS_MAX*100)+'%'; bar.classList.toggle('over',wants>WANTS_MAX);
+  const a=document.getElementById('gWeek'); a.textContent=fmt(gw); a.classList.toggle('over',gw>GAMES_WEEK);
+  const b=document.getElementById('gDay'); b.textContent=fmt(gd); b.classList.toggle('over',gd>GAMES_DAY);
+  document.getElementById('rate').textContent=USD_CAD;
+  let n=0; for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i); if(k.startsWith('day:')&&k!=='day:'+day&&getDay(k.slice(4)).saved)n++;}
+  if(data.saved)n++;
+  document.getElementById('savedTotal').textContent='Saved: '+fmt(n*SAVE_AMT);
+}
+function addMoney(){
+  const n=document.getElementById('mName'), a=document.getElementById('mAmt'), c=document.getElementById('mCur'), t=document.getElementById('mType');
+  const amt=Math.round((+a.value||0)*100)/100; if(!(amt>0))return;
+  (data.money=data.money||[]).push({n:n.value.trim()||t.value,amt,cur:c.value,type:t.value});
+  n.value=a.value=''; save(); renderMoney();
+}
+document.getElementById('mAdd').addEventListener('click',addMoney);
+document.getElementById('mAmt').addEventListener('keydown',e=>{if(e.key==='Enter')addMoney()});
+document.getElementById('mType').addEventListener('change',e=>{if(e.target.value==='Game')document.getElementById('mCur').value='USD'});
+document.getElementById('moneyList').addEventListener('click',e=>{
+  const b=e.target.closest('[data-mdel]'); if(!b)return;
+  const i=+b.dataset.mdel, x=data.money[i];
+  if(confirm('Remove "'+x.n+'"?')){data.money.splice(i,1); save(); renderMoney();}
+});
 
 // ---- new day (4am) ----
 function checkDay(){ if(ymd(now())!==day) load(); }
