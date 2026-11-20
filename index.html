@@ -61,6 +61,11 @@
   .check .ctr button{width:36px;height:36px;padding:0;font-size:20px;line-height:1}
   #ver{color:var(--line);font-size:.7rem;text-align:center;margin-top:16px}
   .mic{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom) + 16px);width:64px;height:64px;border-radius:50%;background:var(--green);font-size:28px;padding:0;box-shadow:0 4px 16px rgba(0,0,0,.5)}
+  .sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:9}
+  .sheet.open{display:flex}
+  .sheet .card{width:100%;margin:0;border-radius:16px 16px 0 0;padding-bottom:calc(env(safe-area-inset-bottom) + 14px)}
+  .sheet textarea{height:96px}
+  #vOut div{padding:4px 0;font-size:.9rem}
 </style>
 </head>
 <body>
@@ -165,8 +170,17 @@
 
 <button class="mic" aria-label="Voice log">🎤</button>
 
+<div class="sheet" id="vSheet"><section class="card">
+  <h2>🎤 Voice log <small id="vStatus"></small></h2>
+  <textarea id="vText" placeholder="e.g. had 2 eggs and toast, walked 50 min, mood 4, spent $8 on a game"></textarea>
+  <div class="note" id="vHint">Tap the 🎤 on your keyboard and talk, then hit Log it.</div>
+  <div id="vOut"></div>
+  <div class="row"><button id="vClose">Close</button><button id="vUndo" style="display:none">Undo</button><button class="add" id="vGo">Log it</button></div>
+  <div class="note"><a href="#" id="vKey" style="color:var(--dim)">Change AI key</a></div>
+</section></div>
+
 <script>
-const VERSION='7'; // bump on every release so the home-screen app updates
+const VERSION='8'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -329,6 +343,63 @@ document.getElementById('moneyList').addEventListener('click',e=>{
   const i=+b.dataset.mdel, x=data.money[i];
   if(confirm('Remove "'+x.n+'"?')){data.money.splice(i,1); save(); renderMoney();}
 });
+
+// ---- voice logging: speech/dictation → Gemini (free tier) → fills the cards ----
+const AI_MODEL='gemini-flash-latest', vS=document.getElementById('vSheet'), vT=document.getElementById('vText'), vO=document.getElementById('vOut'), vSt=document.getElementById('vStatus');
+let undoSnap=null;
+const getKey=(force)=>{let k=localStorage.getItem('gemini_key'); if(!k||force){k=prompt('Paste your free Gemini API key (from aistudio.google.com → Get API key). It stays on this phone.',k||''); if(k)localStorage.setItem('gemini_key',k.trim());} return localStorage.getItem('gemini_key');};
+function openVoice(){
+  vS.classList.add('open'); vO.innerHTML=''; vSt.textContent=''; document.getElementById('vUndo').style.display='none'; vT.value='';
+  const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(SR){try{const r=new SR(); r.lang='en-CA'; r.interimResults=true; vSt.textContent='Listening…';
+    r.onresult=e=>{vT.value=[...e.results].map(x=>x[0].transcript).join(' ')};
+    r.onend=()=>{vSt.textContent=''; if(vT.value.trim())runVoice()};
+    r.onerror=()=>{vSt.textContent=''; vT.focus()}; r.start(); return;}catch(e){}}
+  vT.focus();
+}
+const AI_PROMPT=`You turn one spoken sentence from a health/habit tracker into JSON. Only include what the user actually said. Schema:
+{"food":[{"n":"short name","k":kcal int (estimate if not said),"p":protein g int (estimate),"ff":true if fast food/restaurant chain}],
+"money":[{"n":"item","amt":number,"cur":"CAD" or "USD" (games/in-game purchases default USD, else CAD),"type":"Need" (groceries, school, transit) | "Game" (games/in-game) | "Want"}],
+"walks":[minutes int per walk],"water":glasses to ADD int,"bed":"HH:MM" 24h bedtime tonight,"wake":"HH:MM" 24h,
+"rested":1-5,"mood":1-5,"stress":1-5,"energy":1-5,"why":[any of School,Family,Friends,Bored,Tired,Money,Health,Other],
+"journal":"one line if they describe their day","win":"if they mention something that went well","weight":lb number,
+"habits":{"h_school","h_shower","h_teeth_am","h_teeth_pm","h_laundry": true if done},
+"summary":["short line per thing logged"]}
+Omit keys not mentioned. Sentence: `;
+async function runVoice(){
+  const txt=vT.value.trim(); if(!txt)return; const key=getKey(); if(!key)return;
+  vSt.textContent='Thinking…'; vO.innerHTML='';
+  try{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${AI_MODEL}:generateContent?key=${encodeURIComponent(key)}`,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:AI_PROMPT+JSON.stringify(txt)}]}],generationConfig:{responseMimeType:'application/json',temperature:0.2}})});
+    const j=await r.json(); if(!r.ok)throw new Error(j.error?.message||r.status);
+    applyVoice(JSON.parse(j.candidates[0].content.parts[0].text));
+  }catch(e){vSt.textContent=''; vO.innerHTML='<div style="color:var(--amber)">Couldn\'t log: '+esc(e.message)+'</div>';}
+}
+function applyVoice(a){
+  undoSnap=JSON.stringify(data);
+  const int=(x,lo,hi)=>{x=Math.round(+x);return x>=lo&&x<=hi?x:null}, hm=t=>/^\d{1,2}:\d{2}$/.test(t||'')?t.padStart(5,'0'):null;
+  (a.food||[]).forEach(f=>(data.food=data.food||[]).push({n:String(f.n||'Food'),k:int(f.k,0,5000)||0,p:int(f.p,0,300)||0,ff:!!f.ff}));
+  (a.money||[]).forEach(m=>{const amt=Math.round(+m.amt*100)/100; if(amt>0)(data.money=data.money||[]).push({n:String(m.n||m.type||'Purchase'),amt,cur:m.cur==='USD'?'USD':'CAD',type:['Need','Game','Want'].includes(m.type)?m.type:'Want'})});
+  (a.walks||[]).forEach(w=>{w=int(w,1,600); if(!w)return; const k=!data.walk1?'walk1':'walk2'; data[k]=String((+data[k]||0)+w)});
+  if(int(a.water,1,20)){data.water=Math.min(20,(+data.water||0)+int(a.water,1,20)); data.h_water=data.water>=WATER_GOAL;}
+  ['bed','wake'].forEach(k=>{const t=hm(a[k]); if(t)data[k]=t}); if(hm(a.bed))data.h_bed=mins(data.bed)<=23*60;
+  ['rested','mood','stress','energy'].forEach(k=>{const v=int(a[k],1,5); if(v)data[k]=String(v)});
+  const TAGS=['School','Family','Friends','Bored','Tired','Money','Health','Other']; (a.why||[]).forEach(t=>{if(TAGS.includes(t)){data.why=data.why||[]; if(!data.why.includes(t))data.why.push(t)}});
+  if(a.journal)data.journal=(data.journal?data.journal+' ':'')+a.journal; if(a.win&&!data.win)data.win=a.win;
+  if(+a.weight>50&&+a.weight<600)data.weight=String(+a.weight);
+  Object.entries(a.habits||{}).forEach(([k,v])=>{if(v&&HABITS.includes(k))data[k]=true});
+  save(); render(); vSt.textContent='';
+  const sum=(a.summary||[]).filter(Boolean);
+  vO.innerHTML=(sum.length?sum:['Nothing found to log.']).map(x=>'<div>✓ '+esc(x)+'</div>').join('');
+  document.getElementById('vUndo').style.display=sum.length?'':'none';
+}
+document.querySelector('.mic').addEventListener('click',openVoice);
+document.getElementById('vGo').addEventListener('click',runVoice);
+document.getElementById('vClose').addEventListener('click',()=>vS.classList.remove('open'));
+document.getElementById('vUndo').addEventListener('click',()=>{if(undoSnap){data=JSON.parse(undoSnap); undoSnap=null; save(); render(); vO.innerHTML='<div>Undone.</div>'; document.getElementById('vUndo').style.display='none';}});
+document.getElementById('vKey').addEventListener('click',e=>{e.preventDefault(); getKey(true)});
+vS.addEventListener('click',e=>{if(e.target===vS)vS.classList.remove('open')});
 
 // ---- new day (4am) ----
 function checkDay(){ if(ymd(now())!==day) load(); }
