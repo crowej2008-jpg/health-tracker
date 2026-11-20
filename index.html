@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Health</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Health">
+<meta name="theme-color" content="#0f172a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+  html,body{margin:0;height:100%;background:#0f172a;color:#e2e8f0;font-family:-apple-system,system-ui,sans-serif}
+  body{display:flex;align-items:center;justify-content:center;padding:env(safe-area-inset-top) 16px env(safe-area-inset-bottom)}
+  h1{font-size:2.5rem;margin:0}
+  p{color:#94a3b8}
+  .wrap{text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Hello 👋</h1>
+  <p id="mode"></p>
+</div>
+<script>
+  // Shows whether it's running as a home-screen app (step 1 check)
+  var standalone = window.navigator.standalone || matchMedia('(display-mode: standalone)').matches;
+  document.getElementById('mode').textContent = standalone ? 'Running as home screen app ✅' : 'Open from the home screen icon';
+</script>
+</body>
+</html>
