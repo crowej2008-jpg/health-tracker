@@ -229,7 +229,7 @@
 </section></div>
 
 <script>
-const VERSION='15'; // bump on every release so the home-screen app updates
+const VERSION='16'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -583,7 +583,11 @@ function lockInfo(){
   const mon=new Date(d); mon.setDate(mon.getDate()+((8-mon.getDay())%7||7));
   const st=statusMoney(), over=st.wantsOver||st.gamesOver;
   const h=d.getHours()+DAY_START+d.getMinutes()/60, due=miss.filter(m=>h>=m.at);
-  return {dayNum:yn(d), lockAt:miss.length?Math.min(...miss.map(m=>m.at)):99,
+  // lockTime: one local time string the Shortcut compares with Current Date ("is after" → locked)
+  const at=(off,hr)=>{const x=new Date(d.getFullYear(),d.getMonth(),d.getDate()+off,Math.floor(hr),Math.round(hr%1*60));
+    return ymd(x)+' '+String(x.getHours()).padStart(2,'0')+':'+String(x.getMinutes()).padStart(2,'0');};
+  const lockTime=over?at(0,0):miss.length?at(0,Math.min(...miss.map(m=>m.at))):at(1,isWkend(t)?11:13.5);
+  return {lockTime, dayNum:yn(d), lockAt:miss.length?Math.min(...miss.map(m=>m.at)):99,
     lockMsg:over?'Over the weekly wants limit: locked until Monday':(due.concat(miss)[0]||{msg:''}).msg,
     tomorrowLockAt:isWkend(t)?11:13.5, spendUntil:over?yn(mon):0, lockedNow:over||due.length>0};
 }
