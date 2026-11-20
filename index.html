@@ -180,7 +180,7 @@
 </section></div>
 
 <script>
-const VERSION='9'; // bump on every release so the home-screen app updates
+const VERSION='10'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -418,7 +418,7 @@ async function checkUpdate(){
     const m=(await r.text()).match(/VERSION\s*=\s*'(\d+)'/);
     if(m&&m[1]!==VERSION){
       const n=+sessionStorage.getItem('upd')||0;
-      if(n<2){sessionStorage.setItem('upd',n+1); location.replace(location.pathname+'?v='+m[1]);}
+      if(n<2){sessionStorage.setItem('upd',n+1); location.replace(location.pathname+'?v='+m[1]+(location.search.includes('voice=1')?'&voice=1':''));}
     } else sessionStorage.removeItem('upd');
   }catch(e){}
 }
@@ -426,6 +426,12 @@ document.addEventListener('visibilitychange',()=>{ if(!document.hidden){checkDay
 
 document.getElementById('ver').textContent='v'+VERSION;
 load(); checkUpdate();
+// ---- Back Tap / Siri Shortcut: ...?voice=1 opens straight into voice logging ----
+if(new URLSearchParams(location.search).get('voice')==='1'){
+  history.replaceState(null,'',location.pathname); openVoice();
+  if(!navigator.standalone&&!matchMedia('(display-mode: standalone)').matches)
+    vSt.innerHTML='<span style="color:var(--amber)">Opened in Safari, not the home-screen app — logs here won\'t show in the app.</span>';
+}
 </script>
 </body>
 </html>
