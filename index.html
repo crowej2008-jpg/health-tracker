@@ -86,6 +86,7 @@
   <h1>Today</h1>
   <div><span id="date"></span><button id="pBtn">📈 Progress</button></div>
 </header>
+<div id="lockBar" class="note" style="display:none;text-align:center;padding:8px;margin:0 12px 8px;border-radius:10px;background:#5a1d1d;color:#fff"></div>
 
 <!-- PROGRESS (charts) -->
 <div id="progress">
@@ -228,7 +229,7 @@
 </section></div>
 
 <script>
-const VERSION='14'; // bump on every release so the home-screen app updates
+const VERSION='15'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -567,6 +568,36 @@ function renderSunday(){
 // Shortcuts reads:  <DB URL>/u/<token>/status.json
 let syncT=null;
 const syncCfg=()=>({url:localStorage.getItem('fb_url'),tok:localStorage.getItem('fb_tok')});
+// ---- soft lock (step 14): Shortcut reads lockAt / spendUntil from status.json ----
+// hours are on the 4am clock: 4..28 (1am = 25). Shortcut compares against (Current Date − 4h hour)+4.
+const isWkend=d=>d.getDay()===0||d.getDay()===6;
+const yn=d=>+ymd(d).replace(/-/g,'');
+function lockInfo(){
+  const d=now(), first=isWkend(d)?11:13.5;
+  const food=(data.food||[]).length>0, mood=!!data.mood, sleep=!!(data.bed||data.wake);
+  const miss=[];
+  if(!food||!mood||!sleep) miss.push({at:first,msg:'Log '+[!food&&'food',!mood&&'mood',!sleep&&'sleep'].filter(Boolean).join(' + ')});
+  if((+data.walk1||0)<WALK_MIN) miss.push({at:17,msg:'Do walk 1 (45+ min)'});
+  if((+data.walk2||0)<WALK_MIN) miss.push({at:21,msg:'Do walk 2 (45+ min)'});
+  const t=new Date(d); t.setDate(t.getDate()+1);
+  const mon=new Date(d); mon.setDate(mon.getDate()+((8-mon.getDay())%7||7));
+  const st=statusMoney(), over=st.wantsOver||st.gamesOver;
+  const h=d.getHours()+DAY_START+d.getMinutes()/60, due=miss.filter(m=>h>=m.at);
+  return {dayNum:yn(d), lockAt:miss.length?Math.min(...miss.map(m=>m.at)):99,
+    lockMsg:over?'Over the weekly wants limit: locked until Monday':(due.concat(miss)[0]||{msg:''}).msg,
+    tomorrowLockAt:isWkend(t)?11:13.5, spendUntil:over?yn(mon):0, lockedNow:over||due.length>0};
+}
+function renderLock(){
+  const L=lockInfo(), el=document.getElementById('lockBar');
+  el.style.display=L.lockedNow?'block':'none'; el.textContent='🔒 Instagram + games locked: '+L.lockMsg;
+}
+setInterval(renderLock,60000);
+function statusMoney(){
+  const wk=weekDays().flatMap(d=>d.money||[]), m=data.money||[], r2=n=>Math.round(n*100)/100;
+  const wants=r2(wk.filter(x=>x.type!=='Need').reduce((s,x)=>s+cad(x),0));
+  const gw=r2(wk.filter(x=>x.type==='Game').reduce((s,x)=>s+usd(x),0)), gd=r2(m.filter(x=>x.type==='Game').reduce((s,x)=>s+usd(x),0));
+  return {wants,gw,gd,wantsOver:wants>WANTS_MAX,gamesOver:gw>GAMES_WEEK||gd>GAMES_DAY};
+}
 function statusNow(){
   const f=data.food||[], wk=weekDays().flatMap(d=>d.money||[]), m=data.money||[];
   const walks=['walk1','walk2'].filter(k=>+data[k]>=WALK_MIN).length;
@@ -581,9 +612,9 @@ function statusNow(){
     mood:data.mood||'', stress:data.stress||'', energy:data.energy||'', bed:data.bed||'', wake:data.wake||'',
     wantsWeekCAD:wants, wantsMax:WANTS_MAX, wantsOver:wants>WANTS_MAX,
     gamesWeekUSD:gw, gamesWeekMax:GAMES_WEEK, gamesTodayUSD:gd, gamesDayMax:GAMES_DAY,
-    gamesOver:gw>GAMES_WEEK||gd>GAMES_DAY, savedToday:!!data.saved};
+    gamesOver:gw>GAMES_WEEK||gd>GAMES_DAY, savedToday:!!data.saved, ...lockInfo()};
 }
-function queueSync(){ clearTimeout(syncT); syncT=setTimeout(pushSync,1500); }
+function queueSync(){ renderLock(); clearTimeout(syncT); syncT=setTimeout(pushSync,1500); }
 async function pushSync(){
   const {url,tok}=syncCfg(); if(!url||!tok)return;
   const el=document.getElementById('syncSt');
