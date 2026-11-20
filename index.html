@@ -214,6 +214,7 @@
 </section>
 
 <div id="ver"></div>
+<div class="note" style="text-align:center"><a href="#" id="syncSt" style="color:var(--dim)"></a></div>
 
 <button class="mic" aria-label="Voice log">🎤</button>
 
@@ -227,7 +228,7 @@
 </section></div>
 
 <script>
-const VERSION='13'; // bump on every release so the home-screen app updates
+const VERSION='14'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -241,9 +242,9 @@ function load(){
   day=ymd(now());
   try{data=JSON.parse(localStorage.getItem('day:'+day))||{}}catch(e){data={}}
   document.getElementById('date').textContent=now().toLocaleDateString('en-CA',{weekday:'long',month:'short',day:'numeric'});
-  render();
+  render(); queueSync();
 }
-function save(){try{localStorage.setItem('day:'+day,JSON.stringify(data))}catch(e){}}
+function save(){try{localStorage.setItem('day:'+day,JSON.stringify(data))}catch(e){} queueSync();}
 function render(){
   $$('[data-k]').forEach(el=>{
     const v=data[el.dataset.k];
@@ -560,6 +561,48 @@ function renderSunday(){
     `<div class="note">${wants<=WANTS_MAX?'Under the wants limit 👍 ('+fmt(WANTS_MAX-wants)+' left)':'Over the wants limit by '+fmt(wants-WANTS_MAX)}</div>`;
   const last=getDay(shift(-7)).w_next; document.getElementById('sLast').textContent=last?'Last week you said: "'+last+'"':'';
 }
+
+// ---- cloud sync: today's status → Firebase Realtime DB, so Shortcuts can read it ----
+// DB URL + a random secret token live only on this phone (never in the repo).
+// Shortcuts reads:  <DB URL>/u/<token>/status.json
+let syncT=null;
+const syncCfg=()=>({url:localStorage.getItem('fb_url'),tok:localStorage.getItem('fb_tok')});
+function statusNow(){
+  const f=data.food||[], wk=weekDays().flatMap(d=>d.money||[]), m=data.money||[];
+  const walks=['walk1','walk2'].filter(k=>+data[k]>=WALK_MIN).length;
+  const habits={}; HABITS.forEach(k=>habits[k.slice(2)]=!!data[k]);
+  const r2=n=>Math.round(n*100)/100;
+  const wants=r2(wk.filter(x=>x.type!=='Need').reduce((s,x)=>s+cad(x),0));
+  const gw=r2(wk.filter(x=>x.type==='Game').reduce((s,x)=>s+usd(x),0)), gd=r2(m.filter(x=>x.type==='Game').reduce((s,x)=>s+usd(x),0));
+  return {day, updated:new Date().toISOString(), hour:new Date().getHours(),
+    calories:f.reduce((s,x)=>s+(+x.k||0),0), protein:f.reduce((s,x)=>s+(+x.p||0),0), calGoal:GOAL,
+    walks, walksDone:walks>=2, water:+data.water||0,
+    habits, habitsDone:HABITS.filter(k=>data[k]).length, habitsTotal:HABITS.length,
+    mood:data.mood||'', stress:data.stress||'', energy:data.energy||'', bed:data.bed||'', wake:data.wake||'',
+    wantsWeekCAD:wants, wantsMax:WANTS_MAX, wantsOver:wants>WANTS_MAX,
+    gamesWeekUSD:gw, gamesWeekMax:GAMES_WEEK, gamesTodayUSD:gd, gamesDayMax:GAMES_DAY,
+    gamesOver:gw>GAMES_WEEK||gd>GAMES_DAY, savedToday:!!data.saved};
+}
+function queueSync(){ clearTimeout(syncT); syncT=setTimeout(pushSync,1500); }
+async function pushSync(){
+  const {url,tok}=syncCfg(); if(!url||!tok)return;
+  const el=document.getElementById('syncSt');
+  try{
+    const r=await fetch(`${url}/u/${tok}/status.json`,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(statusNow())});
+    if(el)el.textContent=r.ok?'☁️ synced '+new Date().toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'☁️ sync error '+r.status;
+  }catch(e){ if(el)el.textContent='☁️ offline, will retry'; }
+}
+function setupSync(){
+  let u=prompt('Paste your Firebase Realtime Database URL (looks like https://NAME-default-rtdb.firebaseio.com). Leave blank to turn sync off.',localStorage.getItem('fb_url')||'');
+  if(u===null)return; u=u.trim().replace(/\/+$/,'');
+  if(!u){localStorage.removeItem('fb_url'); document.getElementById('syncSt').textContent='☁️ sync off'; return;}
+  if(!/^https:\/\/[\w.-]+\.(firebaseio\.com|firebasedatabase\.app)$/.test(u)){alert('That doesn\'t look like a Realtime Database URL.');return;}
+  localStorage.setItem('fb_url',u);
+  if(!localStorage.getItem('fb_tok')){const a=new Uint8Array(16);crypto.getRandomValues(a);localStorage.setItem('fb_tok',[...a].map(b=>b.toString(16).padStart(2,'0')).join(''));}
+  pushSync(); prompt('Done! Copy this link into your Shortcut ("Get Contents of URL"):',`${u}/u/${localStorage.getItem('fb_tok')}/status.json`);
+}
+document.getElementById('syncSt').addEventListener('click',e=>{e.preventDefault();setupSync();});
+document.getElementById('syncSt').textContent=syncCfg().url?'☁️ sync on':'☁️ Set up sync';
 
 // ---- new day (4am) ----
 function checkDay(){ if(ymd(now())!==day) load(); }
