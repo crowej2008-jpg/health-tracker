@@ -74,6 +74,11 @@
   .seg button{flex:1}
   .seg button.on{background:var(--green);color:#052e16;font-weight:600}
   .chart svg{width:100%;height:120px;display:block}
+  .stk{display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-top:1px solid var(--line);font-size:.95rem}
+  .stk:first-of-type{border-top:0}
+  .stk b{font-size:1.05rem}.stk b.hot{color:var(--amber)}.stk small{color:var(--dim);margin-left:8px}
+  .ms{display:inline-block;padding:4px 10px;border-radius:999px;border:1px solid var(--line);margin:6px 6px 0 0;font-size:.85rem;color:var(--dim)}
+  .ms.on{background:var(--green);border-color:var(--green);color:#052e16;font-weight:600}
 </style>
 </head>
 <body>
@@ -89,6 +94,10 @@
   <section class="card chart"><h2>🚶 Walk minutes <small id="cWalk"></small></h2><svg id="gWalk"></svg></section>
   <section class="card chart"><h2>🧠 Mood <small id="cMood"></small></h2><svg id="gMood"></svg></section>
   <section class="card chart"><h2>😴 Sleep hours <small id="cSleep"></small></h2><svg id="gSleep"></svg></section>
+  <section class="card"><h2>🔥 Streaks <small>now · best</small></h2><div id="streaks"></div>
+    <div class="note">Today only adds once it's done; it never breaks a streak. School counts weekdays, laundry counts Saturdays.</div></section>
+  <section class="card"><h2>💰 Savings <small id="svTotal"></small></h2><div class="bar"><i id="svBar"></i></div>
+    <div class="note" id="svNext"></div><div id="svBadges"></div></section>
   <div class="note" style="text-align:center">Empty days are skipped in averages.</div>
 </div>
 
@@ -198,7 +207,7 @@
 </section></div>
 
 <script>
-const VERSION='11'; // bump on every release so the home-screen app updates
+const VERSION='12'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -461,6 +470,44 @@ function renderProgress(){
   document.getElementById('cWalk').textContent=chart('gWalk',walk,{goal:WALK_MIN*2,fmt:v=>Math.round(v)+' min'});
   document.getElementById('cMood').textContent=chart('gMood',mood,{max:5,line:1,fmt:v=>v.toFixed(1)+' / 5'});
   document.getElementById('cSleep').textContent=chart('gSleep',slp,{goal:8,max:10,line:1,fmt:v=>v.toFixed(1)+' h'});
+  renderStreaks();
+}
+
+// ---- streaks + savings milestones (step 11) ----
+const kcalOf=d=>(d.food||[]).reduce((a,f)=>a+(+f.k||0),0);
+const STREAKS=[ // [label, did it?, counts on this weekday? (0=Sun)]
+  ['🚶 Walks (both 45+)',d=>+d.walk1>=WALK_MIN&&+d.walk2>=WALK_MIN],
+  ['🍽️ Under 2,300 kcal',d=>{const k=kcalOf(d);return k>0&&k<=GOAL}],
+  ['🏫 School',d=>d.h_school,w=>w>0&&w<6],
+  ['🛏️ In bed by 11',d=>d.h_bed],
+  ['💧 Water (8)',d=>+d.water>=WATER_GOAL],
+  ['🚿 Shower',d=>d.h_shower],
+  ['🪥 Teeth (morning)',d=>d.h_teeth_am],
+  ['🪥 Teeth (night)',d=>d.h_teeth_pm],
+  ['🧺 Laundry',d=>d.h_laundry,w=>w===6,'wk'],
+];
+const MILESTONES=[500,1000,2500,5000,10000], big=n=>'$'+Math.round(n).toLocaleString('en-CA');
+function streak(ok,on,from){
+  let run=0,best=0;
+  for(let i=from;i<=0;i++){
+    const k=shift(i); if(on&&!on(new Date(k+'T12:00').getDay()))continue;
+    if(ok(getDay(k))){run++;best=Math.max(best,run)}else if(i<0)run=0; // unfinished today doesn't break it
+  }
+  return[run,best];
+}
+function renderStreaks(){
+  const keys=[];for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('day:'))keys.push(k.slice(4))}
+  keys.sort(); let ticked=keys.filter(k=>getDay(k).saved).length;
+  const first=keys[0]||shift(0), from=-Math.min(730,Math.round((new Date(shift(0)+'T12:00')-new Date(first+'T12:00'))/864e5));
+  document.getElementById('streaks').innerHTML=STREAKS.map(([n,ok,on,u])=>{
+    const[c,b]=streak(ok,on,from), unit=u||'day'; const pl=x=>x+' '+unit+(x===1?'':'s');
+    return `<div class="stk"><span>${n}</span><span><b class="${c>=3?'hot':''}">${c>=3?'🔥 ':''}${pl(c)}</b><small>best ${b}</small></span></div>`;
+  }).join('');
+  const tot=ticked*SAVE_AMT, next=MILESTONES.find(m=>m>tot), prev=[...MILESTONES].reverse().find(m=>m<=tot)||0;
+  document.getElementById('svTotal').textContent=big(tot)+' saved';
+  document.getElementById('svBar').style.width=(next?(tot-prev)/(next-prev)*100:100)+'%';
+  document.getElementById('svNext').textContent=next?big(next-tot)+' to '+big(next)+' (about '+Math.ceil((next-tot)/SAVE_AMT)+' more transfers)':'Every milestone reached! 🎉';
+  document.getElementById('svBadges').innerHTML=MILESTONES.map(m=>`<span class="ms ${tot>=m?'on':''}">${tot>=m?'✓ ':''}${big(m)}</span>`).join('');
 }
 document.getElementById('pBtn').addEventListener('click',()=>{
   const on=document.body.classList.toggle('prog');
