@@ -229,7 +229,7 @@
 </section></div>
 
 <script>
-const VERSION='16'; // bump on every release so the home-screen app updates
+const VERSION='17'; // bump on every release so the home-screen app updates
 const $$=s=>document.querySelectorAll(s);
 const DAY_START=4; // a day runs 4am→4am, so after-midnight bedtimes/food stay on the right day
 const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -591,6 +591,27 @@ function lockInfo(){
     lockMsg:over?'Over the weekly wants limit: locked until Monday':(due.concat(miss)[0]||{msg:''}).msg,
     tomorrowLockAt:isWkend(t)?11:13.5, spendUntil:over?yn(mon):0, lockedNow:over||due.length>0};
 }
+// ---- reminders (step 15): one "Reminder Check" Shortcut runs at each planned time and reads
+// remind["YYYY-MM-DD HH"]. Only still-missing things get a key, so done = no buzz.
+// Today uses what's logged; the next 2 days get every reminder (nothing logged yet).
+function remindInfo(){
+  const out={}, base=now();
+  for(let off=0;off<3;off++){
+    const d=new Date(base.getFullYear(),base.getMonth(),base.getDate()+off), x=off?{}:data, k=h=>ymd(d)+' '+h;
+    const food=(x.food||[]).length>0, mood=!!x.mood, sleep=!!(x.bed||x.wake);
+    const w1=(+x.walk1||0)>=WALK_MIN, w2=(+x.walk2||0)>=WALK_MIN, wk=isWkend(d);
+    if(!sleep||!mood) out[k('07')]='😴 Log '+[!sleep&&'sleep',!mood&&'mood'].filter(Boolean).join(' + ');
+    out[k('13')]='🍽️ Log lunch'+(!wk&&(!food||!mood||!sleep)?' (lock at 1:30)':'');
+    if(!w1) out[k('15')]='🚶 Walk 1 time: 45 min before the 5pm lock';
+    if(!w2) out[k('19')]='🚶 Walk 2 time: 45 min before the 9pm lock';
+    const miss=[!food&&'food',!mood&&'mood',!sleep&&'sleep',!w1&&'walk 1',!w2&&'walk 2',!x.win&&'daily win'].filter(Boolean);
+    if(miss.length) out[k('21')]='📝 Finish today: '+miss.join(', ');
+    out[k('22')]='🦷 Wind down: brush teeth, bed in 30 min';
+    if(d.getDay()===6) out[k('12')]='🧺 Laundry day';
+    if(d.getDay()===0&&!x.w_rate) out[k('12')]='📊 Sunday check-in + weight chart';
+  }
+  return out;
+}
 function renderLock(){
   const L=lockInfo(), el=document.getElementById('lockBar');
   el.style.display=L.lockedNow?'block':'none'; el.textContent='🔒 Instagram + games locked: '+L.lockMsg;
@@ -616,7 +637,7 @@ function statusNow(){
     mood:data.mood||'', stress:data.stress||'', energy:data.energy||'', bed:data.bed||'', wake:data.wake||'',
     wantsWeekCAD:wants, wantsMax:WANTS_MAX, wantsOver:wants>WANTS_MAX,
     gamesWeekUSD:gw, gamesWeekMax:GAMES_WEEK, gamesTodayUSD:gd, gamesDayMax:GAMES_DAY,
-    gamesOver:gw>GAMES_WEEK||gd>GAMES_DAY, savedToday:!!data.saved, ...lockInfo()};
+    gamesOver:gw>GAMES_WEEK||gd>GAMES_DAY, savedToday:!!data.saved, remind:remindInfo(), ...lockInfo()};
 }
 function queueSync(){ renderLock(); clearTimeout(syncT); syncT=setTimeout(pushSync,1500); }
 async function pushSync(){
